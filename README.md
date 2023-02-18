@@ -10,6 +10,12 @@ This is a project for the course **Applied Time Series Analysis**. It's mainly a
 
 Hongye Li, Jiayin Ye, and Meng-tien Tsai
 
+### Techniques
+
+- Time Series
+- ARIMA models
+- ARMA models
+
 ### Session Info
 
 R version 4.1.1 (2021-08-10)
