@@ -1,0 +1,175 @@
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(fig.pos = 'H')
+library(readxl)
+library(knitr)
+
+library(kableExtra)
+library(astsa)
+library(Hmisc)
+library(ggplot2)
+library(astsa)
+temp <- data.frame(read_excel('TempNH_1850_2021.xlsx'))
+x <- temp$Year
+y <- temp$Anomaly
+par(mfrow=c(1,2))
+plot.ts(y, ylab = 'temperature anomalies')
+hist(y, main = 'Histogram of temperature anomalies', xlab = 'temperature anomalies') par(mfrow=c(1,1))
+Box.test(y, lag = 10, type = 'Ljung-Box')
+yd1 <- diff(y,1)
+par(mfrow=c(1,2))
+plot.ts(yd1, ylab = 'first difference')
+hist(yd1, xlab = 'first difference', main = 'Histogram of first difference') par(mfrow=c(1,1))
+Box.test(yd1, lag = 10, type = 'Ljung-Box')
+yd2 <- diff(y,2)
+par(mfrow=c(1,2))
+plot.ts(yd2, ylab = 'second difference')
+hist(yd2, xlab = 'second difference', main = 'Histogram of second difference') par(mfrow=c(1,1))
+par(mfrow=c(1,2))
+acf(yd1, main = 'first difference')
+pacf(yd1, main = 'first difference')
+par(mfrow=c(1,1))
+fit_pre <- sarima(y, p = 3, d = 1, q = 1) #arima(y, order = c(3,1,1)) pacf(fit_pre$fit$residuals, main = 'residuals')
+# library(astsa)
+AIC <- matrix(0, 4, 4)
+for (i in 1:4){
+for (j in 1:4){ AIC[i,j]<-sarima(y,p=i-1,d=1,q=j-1,details=FALSE)$AIC
+} }
+AIC <- data.frame(AIC)
+rownames(AIC) <- c(0:3)
+colnames(AIC) <- c(0:3)
+kable(AIC, booktabs = TRUE, caption = "AIC table") %>%
+  kable_classic_2(full_width = F,latex_options = "striped") %>%
+  kable_styling(latex_options = "HOLD_position")
+#which(AIC == min(AIC), arr.ind = TRUE)
+#rownames(AIC)[which(AIC == min(AIC), arr.ind = TRUE)[1]] #colnames(AIC)[which(AIC == min(AIC), arr.ind = TRUE)[2]]
+fit_final2 <- sarima(y, p = 3, d = 1, q = 0)
+#hist(fit_final2$fit$residuals, main = 'Histogram of residuals [Final]') pacf(fit_final2$fit$residuals, main = 'residuals')
+para_se <- data.frame(fit_final2$ttable[,1:2])
+kable(para_se, booktabs = TRUE, caption = "Parameters and Standard Errors") %>%
+  kable_classic_2(full_width = F,latex_options = "striped") %>%
+  kable_styling(latex_options = "HOLD_position")
+n <- length(y)
+h <- 6
+m <- n-h
+ynew <- y[1:(n-h)]
+ylast <- y[(n-h+1):n]
+# fit
+# Use "sarima.for" to forecast
+fit_ref <- sarima.for(ynew, h, p = 3, d = 1, q = 0, plot = F) # prediction
+upper <- fit_ref$pred+1.96*fit_ref$se
+lower <- fit_ref$pred-1.96*fit_ref$se
+# Use "arima"
+# fit_ref <- arima(ynew, order = c(3,1,0)) # prediction
+# fcast <- predict(fit_ref, n.ahead=h)
+# upper <- fcast$pred+1.96*fcast$se
+# lower <- fcast$pred-1.96*fcast$se
+# plot
+plot.ts(ynew, xlim=c(0,n), ylim=c(-1,1.5), xlab='Time', ylab = 'temperature anomalies') polygon(x=c(m+1:h, m+h:1), y=c(upper, rev(lower)), col='lightblue', border=NA) #lines(x=m+(1:h), y=fcast$pred, col='red')
+lines(x=m+(1:h), y=fit_ref$pred, col='red')
+lines(x=m+(1:h), y=ylast, col='black')
+legend('topleft', legend = c('true', 'fitted'), cex=0.5, lty=c(1,1), col=c('black', 'red')
+trend_spline=function(y, lam) {
+# Fits cubic spline estimate of trend
+# If lam contains a single number, then the corresponding
+# Box-Cox transformation is made, and a spline model is fitted
+# If lam is a vector, then the best transformation is obtained from the # candidates in ‘lam’, and then spline is
+# fitted for the best transformation after
+# deleting knots using backward stepwise regression
+#Output,
+# 1. transformed y: ytran (if lam is a vector, this corresponds to the # best transformation)
+# 2. trend: the fitted spline estimate
+# 3. residual: the remainder, ie, ytran-trend
+# 4. rsq, Rˆ2 values for different transformations
+# 5. lamopt: the best chosen transformation from lam
+n=length(y);
+p=length(lam)
+rsq=rep(0, p)
+y=sapply(y,as.numeric)
+tm=seq(1/n, 1, by=1/n)
+xx=cbind(tm, tmˆ2, tmˆ3)
+knot=seq(.1, .9, by=.1)
+m=length(knot)
+for (j in 1:m) {
+u=pmax(tm-knot[j], 0); u=uˆ3
+xx=cbind(xx,u)
+}
+for (i in 1:p) {
+if (lam[i]==0) {
+ytran=log(y)
+} else {
+ytran=(yˆlam[i]-1)/lam[i]
+}
+ft=lm(ytran~xx)
+res=ft$resid; sse=sum(resˆ2)
+ssto=(n-1)*var(ytran);
+rsq[i]=1-sse/ssto
+}
+ii=which.max(rsq); lamopt=lam[ii]
+if (lamopt==0) {
+ytran=log(y)
+} else {
+ytran=yˆlamopt
+}
+newdat=data.frame(cbind(ytran,xx))
+ft=lm(ytran~.,data=newdat);
+best_ft=step(ft, trace=0)
+fit=best_ft$fitted; res=best_ft$resid
+result=list(ytrans=ytran, fitted=fit, residual=res, rsq=rsq, lamopt=lamopt) return(result)
+}
+temp$Time <- 1:nrow(temp)
+temp$Anomaly_shift <- temp$Anomaly+abs(min(temp$Anomaly))+1
+# get the data for fit
+# ynew: temperature anomalies for the years 1850-2015
+# s_time: year 1850-2015 represented with number 1-166
+# ynew_shift: shifted temperature anomalies for the years 1850-2015
+s_time <- temp$Time[1:(nrow(temp)-6)]
+ynew_shift <- temp$Anomaly_shift[1:(nrow(temp)-6)]
+# Fit spline
+splinefit <- trend_spline(ynew_shift, lam = c(-1,-0.5,0,0.5,1))
+#splinefit$lamopt
+# Get the trend of spline, i.e. fitted values of the function
+splinefit <- trend_spline(ynew, lam = 1)
+splinetrend <- splinefit$fitted
+# Plot yt and the three trend estimates against time on the same graph
+plot(s_time, ynew, type='l', lty=1, col=1, xlab='Time', ylab = 'temperature anomalies',
+     main="Time series with spline trend")
+points(s_time, splinetrend, type='l', lty=2, col=2)
+legend(1,3e6, c("temp", "spline"), lty=c(1,2),
+       col = c(1,2))
+par(mfrow = c(1,3))
+plot(s_time, splinefit$residual, type = 'l', xlab="Time", ylab="rough",
+     main="rough")
+# ACF plot
+acf(splinefit$residual, lag.max = 10, main = 'ACF plot of rough part')
+# PACF plot
+pacf(splinefit$residual, lag.max = 10, main = 'PACF plot of rough part') AIC <- matrix(0,4,4)
+for (i in 1:4) { for (j in 1:4) {
+    AIC[i,j] <- sarima(splinefit$residual, p = i-1, d = 0, q = j-1, details = F)$AIC
+  }
+}
+AIC <- data.frame(AIC)
+rownames(AIC) <- c(0:3)
+colnames(AIC) <- c(0:3)
+kable(AIC, booktabs = TRUE, caption = "AIC table") %>%
+  kable_classic_2(full_width = F,latex_options = "striped") %>%
+  kable_styling(latex_options = "HOLD_position")
+#which(AIC == min(AIC), arr.ind = TRUE)
+#rownames(AIC)[which(AIC == min(AIC), arr.ind = TRUE)[1]]
+#colnames(AIC)[which(AIC == min(AIC), arr.ind = TRUE)[2]]
+# forcast the rough
+fitrough <- sarima.for(splinefit$residual, p = 2, d = 0, q = 1, n.ahead = 6, plot = F) #fitrough$pred
+#data.frame(observed = xlast, forecast = fcast$pred)
+#upper <- fcast$pred+1.96*fcast$se
+#lower <- fcast$pred-1.96*fcast$se
+# forcast the trend using function approxExtrap in the Hmisc package # library(Hmisc)
+fittrend <- approxExtrap(s_time, splinefit$fitted, xout=c(167:172))
+# the forecasts of the anomalies for the years 2016-2021
+fitpred <- fitrough$pred + fittrend$y
+#fitpred
+# plot
+plot.ts(ynew, xlim=c(0,n), ylim=c(-1,1.5), xlab='Time', ylab = 'temperature anomalies') # CI from ARIMA(3,1,0)
+polygon(x=c(m+1:h, m+h:1), y=c(upper, rev(lower)), col='lightblue', border=NA)
+lines(x=m+(1:h), y=fit_ref$pred, col='red')
+lines(x=m+(1:h), y=fitpred, col='blue')
+lines(x=m+(1:h), y=ylast, col='black')
+legend('topleft', legend = c('true', 'ARIMA(3,1,0)-fitted', 'Spline & ARMA(2,1)-fitted'), cex=0.5, lty=c(1,1), col=c('black', 'red', 'blue'))
